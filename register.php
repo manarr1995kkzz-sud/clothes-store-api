@@ -1,97 +1,60 @@
 <?php
-include 'config.php';
+header("Content-Type: application/json");
+include 'db.php';
 
-if(isset($_POST['register'])){
-
-$username=$_POST['username'];
-$password=$_POST['password'];
-
-$check=mysqli_query($conn,
-"SELECT * FROM users
-WHERE username='$username'");
-
-if(mysqli_num_rows($check)>0){
-
-$error="اسم المستخدم موجود مسبقاً";
-
-}else{
-
-mysqli_query($conn,
-"INSERT INTO users(username,password)
-VALUES('$username','$password')");
-
-header("Location: login.php");
-
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Only POST allowed"]);
+    exit;
 }
+
+
+$username = $_POST['username'] ?? '';
+$password = $_POST['password'] ?? '';
+
+
+if (empty($username)) {
+    $data = json_decode(file_get_contents("php://input"));
+    $username = $data->username ?? '';
+    $password = $data->password ?? '';
 }
+
+if (empty($username) || empty($password)) {
+    http_response_code(400);
+    echo json_encode(["status" => "error", "message" => "Username and password required"]);
+    exit;
+}
+
+
+$check = mysqli_prepare($conn, "SELECT id FROM users WHERE username = ?");
+mysqli_stmt_bind_param($check, "s", $username);
+mysqli_stmt_execute($check);
+mysqli_stmt_store_result($check);
+
+if (mysqli_stmt_num_rows($check) > 0) {
+    http_response_code(409);
+    echo json_encode(["status" => "error", "message" => "Username already exists"]);
+    exit;
+}
+mysqli_stmt_close($check);
+
+
+$hashed_password = password_hash($password, PASSWORD_DEFAULT);
+
+$stmt = mysqli_prepare($conn, "INSERT INTO users (username, password) VALUES (?, ?)");
+mysqli_stmt_bind_param($stmt, "ss", $username, $hashed_password);
+
+if (mysqli_stmt_execute($stmt)) {
+    http_response_code(201);
+    echo json_encode([
+        "status" => "success",
+        "message" => "User registered successfully",
+        "user_id" => mysqli_insert_id($conn)
+    ]);
+} else {
+    http_response_code(500);
+    echo json_encode(["status" => "error", "message" => "Registration failed"]);
+}
+mysqli_stmt_close($stmt);
+mysqli_close($conn);
 ?>
-
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-
-<head>
-
-<meta charset="UTF-8">
-<title>إنشاء حساب</title>
-
-<link rel="stylesheet" href="style.css">
-
-</head>
-
-<body class="register-page">
-
-<div class="overlay">
-
-<div class="register-container">
-
-<h1>
-✨ إنشاء حساب جديد
-</h1>
-
-<p class="welcome">
-انضم إلى متجر الأزياء العصري
-</p>
-
-<?php
-if(isset($error)){
-echo "<p class='error'>$error</p>";
-}
-?>
-
-<form method="POST">
-
-<input type="text"
-name="username"
-placeholder="اسم المستخدم"
-required>
-
-<input type="password"
-name="password"
-placeholder="كلمة المرور"
-required>
-
-<button type="submit"
-name="register">
-
-إنشاء حساب
-
-</button>
-
-</form>
-
-<p class="register-text">
-
-لديك حساب بالفعل؟
-
-<a href="login.php">
-تسجيل الدخول
-</a>
-
-</p>
-
-</div>
-
-</div>
-
-</body>
-</html>
